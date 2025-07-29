@@ -4,10 +4,9 @@ import Array "mo:core/Array";
 import Text "mo:core/Text";
 import Nat "mo:core/Nat";
 import Nat64 "mo:core/Nat64";
-import Blob "mo:core/Blob";
 import Order "mo:core/Order";
 import Iter "mo:core/Iter";
-import Int "mo:core/Int";
+import Blob "mo:core/Blob";
 import Buffer "mo:base/Buffer";
 import CID "mo:cid";
 
@@ -21,7 +20,7 @@ module {
   /// * `links`: Array of links to other DAG-PB nodes
   public type Node = {
     links : [Link];
-    data : ?[Nat8];
+    data : ?Blob;
   };
 
   /// Represents a link to another DAG-PB node.
@@ -138,20 +137,22 @@ module {
   public func fromBytes(bytes : Iter.Iter<Nat8>) : Result.Result<Node, Text> {
     // First decode using the protobuf library
     let schema : [Protobuf.FieldType] = [
-      // Data
-      { fieldNumber = 1; valueType = #bytes },
       {
         // Links
         fieldNumber = 2;
-        valueType = #message([
-          // Hash (required)
-          { fieldNumber = 1; valueType = #bytes },
-          // Name (optional)
-          { fieldNumber = 2; valueType = #string },
-          // Tsize (optional)
-          { fieldNumber = 3; valueType = #uint64 },
-        ]);
+        valueType = #repeated(
+          #message([
+            /* Hash (required) */
+            { fieldNumber = 1; valueType = #bytes },
+            /* Name (optional) */
+            { fieldNumber = 2; valueType = #string },
+            /* Tsize (optional) */
+            { fieldNumber = 3; valueType = #uint64 },
+          ])
+        );
       },
+      // Data
+      { fieldNumber = 1; valueType = #bytes },
     ];
     switch (Protobuf.fromBytes(bytes, schema)) {
       case (#ok(protobufMessage)) {
@@ -177,17 +178,6 @@ module {
 
     let fields = Buffer.Buffer<Protobuf.Field>(2);
 
-    // Add data field (field 1) if present
-    switch (node.data) {
-      case (?data) {
-        fields.add({
-          fieldNumber = 1;
-          value = #bytes(data);
-        });
-      };
-      case (null) ();
-    };
-
     // Add links (field 2)
     for (link in sortedLinks.vals()) {
       switch (linkToProtobufField(link)) {
@@ -196,11 +186,22 @@ module {
       };
     };
 
+    // Add data field (field 1) if present
+    switch (node.data) {
+      case (?data) {
+        fields.add({
+          fieldNumber = 1;
+          value = #bytes(Blob.toArray(data));
+        });
+      };
+      case (null) ();
+    };
+
     #ok(Buffer.toArray(fields));
   };
 
   private func fromProtobuf(message : [Protobuf.Field]) : Result.Result<Node, Text> {
-    var data : ?[Nat8] = null;
+    var data : ?Blob = null;
     let links = Buffer.Buffer<Link>(0);
 
     for (field in message.vals()) {
@@ -208,7 +209,7 @@ module {
         case (1) {
           // Data field
           switch (field.value) {
-            case (#bytes(bytes)) data := ?bytes;
+            case (#bytes(bytes)) data := ?Blob.fromArray(bytes);
             case (_) return #err("Field 1 must be bytes for data, got " # debug_show (field.value));
           };
         };
@@ -219,6 +220,15 @@ module {
               switch (protobufFieldToLink(linkMessage)) {
                 case (#ok(link)) links.add(link);
                 case (#err(e)) return #err(e);
+              };
+            };
+            case (#repeated(linkValues)) {
+              for (linkValue in linkValues.vals()) {
+                let #message(linkMessage) = linkValue else return #err("Expected repeated field 2 to contain messages for links, got " # debug_show (linkValue));
+                switch (protobufFieldToLink(linkMessage)) {
+                  case (#ok(link)) links.add(link);
+                  case (#err(e)) return #err(e);
+                };
               };
             };
             case (_) return #err("Field 2 must be a message for links, got " # debug_show (field.value));
@@ -243,21 +253,6 @@ module {
   };
 
   private func validate(node : Node) : Result.Result<(), Text> {
-    // Validate links
-    for (link in node.links.vals()) {
-      // CID validation is handled by the CID library internally
-
-      // Check tsize is reasonable if present
-      switch (link.tsize) {
-        case (?size) {
-          if (size > 1000000000000) {
-            // 1TB limit
-            return #err("Link tsize is unreasonably large");
-          };
-        };
-        case null {};
-      };
-    };
 
     // Check for duplicate link names
     switch (checkDuplicateNames(node.links)) {
@@ -397,7 +392,7 @@ module {
     for (i in Nat.range(0, sortedLinks.size() - 2)) {
       switch (sortedLinks[i].name, sortedLinks[i + 1].name) {
         case (?nameA, ?nameB) {
-          if (Text.equal(nameA, nameB)) {
+          if (Text.equal(nameA, nameB) and nameA != "") {
             return #err("Duplicate link name: " # nameA);
           };
         };
