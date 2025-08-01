@@ -7,7 +7,8 @@ import Nat64 "mo:core/Nat64";
 import Order "mo:core/Order";
 import Iter "mo:core/Iter";
 import Blob "mo:core/Blob";
-import Buffer "mo:base/Buffer";
+import List "mo:core/List";
+import Buffer "mo:buffer";
 import CID "mo:cid";
 
 module {
@@ -63,9 +64,10 @@ module {
   /// };
   /// ```
   public func toBytes(node : Node) : Result.Result<[Nat8], Text> {
-    let buffer = Buffer.Buffer<Nat8>(estimateSize(node));
+    let list = List.empty<Nat8>();
+    let buffer = Buffer.fromList<Nat8>(list);
     switch (toBytesBuffer(buffer, node)) {
-      case (#ok(_)) #ok(Buffer.toArray(buffer));
+      case (#ok(_)) #ok(List.toArray(list));
       case (#err(e)) #err(e);
     };
   };
@@ -90,18 +92,19 @@ module {
   ///
   /// Example:
   /// ```motoko
-  /// let buffer = Buffer.Buffer<Nat8>(100);
+  /// let list = List.empty<Nat8>();
+  /// let buffer = Buffer.fromList<Nat8>(list);
   /// let node = { data = ?[72, 101, 108, 108, 111]; links = [] };
   /// let result = toBytesBuffer(buffer, node);
   /// switch (result) {
-  ///     case (#ok(bytesWritten)) { /* bytesWritten contains the count */ };
+  ///     case (#ok) { /* success */ };
   ///     case (#err(error)) { /* handle error */ };
   /// };
   /// ```
-  public func toBytesBuffer(buffer : Buffer.Buffer<Nat8>, node : Node) : Result.Result<Nat, Text> {
+  public func toBytesBuffer(buffer : Buffer.Buffer<Nat8>, node : Node) : Result.Result<(), Text> {
     switch (toProtobuf(node)) {
       case (#ok(protobufMessage)) switch (Protobuf.toBytesBuffer(buffer, protobufMessage)) {
-        case (#ok(bytesWritten)) #ok(bytesWritten);
+        case (#ok) #ok;
         case (#err(e)) #err("Failed to encode Protobuf: " # e);
       };
       case (#err(e)) #err(e);
@@ -176,12 +179,12 @@ module {
     // Sort links by name for deterministic encoding
     let sortedLinks = sortLinks(node.links);
 
-    let fields = Buffer.Buffer<Protobuf.Field>(2);
+    let fields = List.empty<Protobuf.Field>();
 
     // Add links (field 2)
     for (link in sortedLinks.vals()) {
       switch (linkToProtobufField(link)) {
-        case (#ok(linkField)) fields.add(linkField);
+        case (#ok(linkField)) List.add(fields, linkField);
         case (#err(e)) return #err(e);
       };
     };
@@ -189,20 +192,23 @@ module {
     // Add data field (field 1) if present
     switch (node.data) {
       case (?data) {
-        fields.add({
-          fieldNumber = 1;
-          value = #bytes(Blob.toArray(data));
-        });
+        List.add(
+          fields,
+          {
+            fieldNumber = 1;
+            value = #bytes(Blob.toArray(data));
+          },
+        );
       };
       case (null) ();
     };
 
-    #ok(Buffer.toArray(fields));
+    #ok(List.toArray(fields));
   };
 
   private func fromProtobuf(message : [Protobuf.Field]) : Result.Result<Node, Text> {
     var data : ?Blob = null;
-    let links = Buffer.Buffer<Link>(0);
+    let links = List.empty<Link>();
 
     for (field in message.vals()) {
       switch (field.fieldNumber) {
@@ -218,7 +224,7 @@ module {
           switch (field.value) {
             case (#message(linkMessage)) {
               switch (protobufFieldToLink(linkMessage)) {
-                case (#ok(link)) links.add(link);
+                case (#ok(link)) List.add(links, link);
                 case (#err(e)) return #err(e);
               };
             };
@@ -226,7 +232,7 @@ module {
               for (linkValue in linkValues.vals()) {
                 let #message(linkMessage) = linkValue else return #err("Expected repeated field 2 to contain messages for links, got " # debug_show (linkValue));
                 switch (protobufFieldToLink(linkMessage)) {
-                  case (#ok(link)) links.add(link);
+                  case (#ok(link)) List.add(links, link);
                   case (#err(e)) return #err(e);
                 };
               };
@@ -242,7 +248,7 @@ module {
 
     let node = {
       data = data;
-      links = Buffer.toArray(links);
+      links = List.toArray(links);
     };
 
     // Final validation
@@ -265,23 +271,6 @@ module {
 
   // Private helper functions
 
-  private func estimateSize(node : Node) : Nat {
-    var size = switch (node.data) {
-      case (?data) data.size() + 10; // data + overhead
-      case null 0;
-    };
-
-    for (link in node.links.vals()) {
-      size += 50; // Estimate per link
-      switch (link.name) {
-        case (?name) size += name.size();
-        case null {};
-      };
-    };
-
-    size;
-  };
-
   private func sortLinks(links : [Link]) : [Link] {
     Array.sort(
       links,
@@ -297,22 +286,28 @@ module {
   };
 
   private func linkToProtobufField(link : Link) : Result.Result<Protobuf.Field, Text> {
-    let linkFields = Buffer.Buffer<Protobuf.Field>(3);
+    let linkFields = List.empty<Protobuf.Field>();
 
     // Hash field (field 1, required)
     let hashBytes = CID.toBytes(link.hash);
-    linkFields.add({
-      fieldNumber = 1;
-      value = #bytes(hashBytes);
-    });
+    List.add(
+      linkFields,
+      {
+        fieldNumber = 1;
+        value = #bytes(hashBytes);
+      },
+    );
 
     // Name field (field 2, optional)
     switch (link.name) {
       case (?name) {
-        linkFields.add({
-          fieldNumber = 2;
-          value = #string(name);
-        });
+        List.add(
+          linkFields,
+          {
+            fieldNumber = 2;
+            value = #string(name);
+          },
+        );
       };
       case null {};
     };
@@ -320,17 +315,20 @@ module {
     // Tsize field (field 3, optional)
     switch (link.tsize) {
       case (?size) {
-        linkFields.add({
-          fieldNumber = 3;
-          value = #uint64(Nat64.fromNat(size));
-        });
+        List.add(
+          linkFields,
+          {
+            fieldNumber = 3;
+            value = #uint64(Nat64.fromNat(size));
+          },
+        );
       };
       case null {};
     };
 
     #ok({
       fieldNumber = 2; // Links are field 2 in the parent message
-      value = #message(Buffer.toArray(linkFields));
+      value = #message(List.toArray(linkFields));
     });
   };
 

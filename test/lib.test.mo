@@ -493,8 +493,8 @@ test(
       };
       let hash = Sha256.fromArray(#sha256, Blob.toArray(actualBytes));
       let actualCID = #v1({
-        codec = #dag_pb;
-        hashAlgorithm = #sha2_256;
+        codec = #dagPb;
+        hashAlgorithm = #sha2256;
         hash = hash;
       });
       if (actualCID != testCase.expectedCID) {
