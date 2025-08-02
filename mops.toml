@@ -1,14 +1,14 @@
 [package]
 name = "dag-pb"
-version = "0.0.2"
+version = "0.0.3"
 description = "A Motoko library for encoding and decoding DAG-PB (DAG-Protobuf) data structures used by IPLD."
 repository = "https://github.com/edjcase/motoko_dag_pb"
 keywords = ["dag", "protobuf", "ipld", "unixfs", "encode", "decode", "pb"]
 license = "MIT"
 
 [dependencies]
-cid = "1.0.1"
-protobuf = "0.0.5"
+cid = "1.0.2"
+protobuf = "0.0.6"
 core = "0.6.0"
 buffer = "0.0.1"
 
