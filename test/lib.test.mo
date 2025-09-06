@@ -1,10 +1,10 @@
 import { test } "mo:test";
 import DagPb "../src";
-import List "mo:core/List";
-import Text "mo:core/Text";
-import Blob "mo:core/Blob";
-import Runtime "mo:core/Runtime";
-import CID "mo:cid";
+import List "mo:core@1/List";
+import Text "mo:core@1/Text";
+import Blob "mo:core@1/Blob";
+import Runtime "mo:core@1/Runtime";
+import CID "mo:cid@1";
 import Sha256 "mo:sha2/Sha256";
 
 func cidFromTextOrTrap(text : Text) : CID.CID {

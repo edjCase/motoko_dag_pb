@@ -1,15 +1,15 @@
-import Protobuf "mo:protobuf";
-import Result "mo:core/Result";
-import Array "mo:core/Array";
-import Text "mo:core/Text";
-import Nat "mo:core/Nat";
-import Nat64 "mo:core/Nat64";
-import Order "mo:core/Order";
-import Iter "mo:core/Iter";
-import Blob "mo:core/Blob";
-import List "mo:core/List";
-import Buffer "mo:buffer";
-import CID "mo:cid";
+import Protobuf "mo:protobuf@0";
+import Result "mo:core@1/Result";
+import Array "mo:core@1/Array";
+import Text "mo:core@1/Text";
+import Nat "mo:core@1/Nat";
+import Nat64 "mo:core@1/Nat64";
+import Order "mo:core@1/Order";
+import Iter "mo:core@1/Iter";
+import Blob "mo:core@1/Blob";
+import List "mo:core@1/List";
+import Buffer "mo:buffer@0";
+import CID "mo:cid@1";
 
 module {
 
